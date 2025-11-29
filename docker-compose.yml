@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend-nodejs
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=file:./dev.db
+      - BASE_URL=http://localhost:5000
+      # Add other env vars here
+    volumes:
+      - ./backend-nodejs/uploads:/app/uploads
+      - ./backend-nodejs/prisma:/app/prisma # Persist DB if using SQLite file
+    networks:
+      - sas-network
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - sas-network
+
+networks:
+  sas-network:
+    driver: bridge

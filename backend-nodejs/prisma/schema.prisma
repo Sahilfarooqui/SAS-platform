@@ -1,0 +1,45 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String?
+  password      String?
+  facebookAccessToken  String?
+  facebookRefreshToken String?
+  twitterAccessToken   String?
+  twitterRefreshToken  String?
+  instagramAccessToken String?
+  instagramRefreshToken String?
+  ayrshareProfileKey    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  scheduledPosts ScheduledPost[] // Opposite relation for ScheduledPost
+}
+
+model ScheduledPost {
+  id            String    @id @default(uuid())
+  content       String
+  mediaUrls     String?   // Store as JSON string
+  scheduledTime DateTime
+  platforms     String    // Store as JSON string
+  status        String    @default("pending")
+  deliveryStatus String? // e.g., 'delivered', 'failed'
+  socialPostId  String? // ID returned by social media API
+  engagementMetrics Json? // Store engagement data (likes, comments, shares, etc.)
+  errorMessage  String? // Store error message if post fails
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+}

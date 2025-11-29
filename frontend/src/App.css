@@ -1,0 +1,185 @@
+/* Global Styles */
+body {
+  margin: 0;
+  font-family: 'Roboto', sans-serif; /* Using a more modern font */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f4f7f6; /* Light background for the whole app */
+  color: #333;
+}
+
+* {
+  box-sizing: border-box; /* Ensure padding and border are included in the element's total width and height */
+}
+
+.App {
+  text-align: center;
+  font-family: Arial, sans-serif;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+}
+
+.post-form {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: left;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group textarea,
+.form-group input[type="url"],
+.form-group input[type="file"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box; /* Include padding in width */
+}
+
+.form-group textarea {
+  resize: vertical;
+}
+
+.form-group input[type="date"],
+.form-group input[type="time"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.submit-button {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.submit-button:hover {
+  background-color: #0056b3;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+table th,
+table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+table th {
+  background-color: #f2f2f2;
+}
+
+table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+table tr:hover {
+  background-color: #f1f1f1;
+}
+
+.auth-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: #282c34;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  color: white;
+  max-width: 400px;
+  margin: 50px auto;
+}
+
+.auth-container h2 {
+  color: #61dafb;
+  margin-bottom: 20px;
+}
+
+.auth-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-form .form-group {
+  margin-bottom: 15px;
+}
+
+.auth-form label {
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="email"],
+.auth-form input[type="password"] {
+  width: calc(100% - 20px);
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #3a3f47;
+  color: white;
+  font-size: 16px;
+}
+
+.auth-form input::placeholder {
+  color: #bbb;
+}
+
+.auth-form .submit-button {
+  background-color: #61dafb;
+  color: #282c34;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.auth-form .submit-button:hover {
+  background-color: #21a1f1;
+}
+
+.auth-container p {
+  margin-top: 20px;
+}
+
+.auth-container p a {
+  color: #61dafb;
+  text-decoration: none;
+}
+
+.auth-container p a:hover {
+  text-decoration: underline;
+}
