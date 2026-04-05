@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import API_URL from './config';
 
 function Analytics() {
   const [posts, setPosts] = useState([]);
@@ -8,7 +9,7 @@ function Analytics() {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/posts', {
+        const response = await fetch(`${API_URL}/api/posts`, {
             credentials: 'include'
         });
         if (!response.ok) {

@@ -4,11 +4,14 @@ import Analytics from './Analytics';
 import SocialConnect from './SocialConnect';
 import PostMonitoring from './PostMonitoring';
 import AnalyticsDashboard from './AnalyticsDashboard';
-import Register from './Register'; // Import Register component
-import Login from './Login';     // Import Login component
-import Navigation from './Navigation'; // Import Navigation
-import ProtectedRoute from './ProtectedRoute'; // Import ProtectedRoute
+import Register from './Register';
+import Login from './Login';
+import Navigation from './Navigation';
+import ProtectedRoute from './ProtectedRoute';
+import API_URL from './config';
 import './App.css';
+
+const PLATFORM_OPTIONS = ['facebook', 'twitter', 'instagram'];
 
 function App() {
   const [postContent, setPostContent] = useState('');
@@ -17,6 +20,7 @@ function App() {
   const [linkUrl, setLinkUrl] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
+  const [selectedPlatforms, setSelectedPlatforms] = useState(['facebook', 'twitter', 'instagram']);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -24,34 +28,40 @@ function App() {
     }
   };
 
+  const handlePlatformChange = (platform) => {
+    setSelectedPlatforms(prev =>
+      prev.includes(platform)
+        ? prev.filter(p => p !== platform)
+        : [...prev, platform]
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (selectedPlatforms.length === 0) {
+      alert('Please select at least one platform.');
+      return;
+    }
     
     const formData = new FormData();
     formData.append('postContent', postContent);
     if (selectedFile) {
         formData.append('image', selectedFile);
     } else if (imageUrl) {
-        // If user provided URL instead of file, we pass it as mediaUrls
-        // Note: The backend expects mediaUrls as a JSON string of an array
         formData.append('mediaUrls', JSON.stringify([imageUrl]));
     }
 
     if (linkUrl) formData.append('linkUrl', linkUrl);
-    
-    // Platforms: Defaulting to all connected or specific ones.
-    // For simplicity, let's assume we send a default list or the user would select them.
-    // Sending a default 'facebook' for now as per original logic likely implied or required.
-    formData.append('platforms', JSON.stringify(['facebook', 'twitter', 'instagram']));
+    formData.append('platforms', JSON.stringify(selectedPlatforms));
 
     if (scheduleDate && scheduleTime) {
         formData.append('scheduledTime', `${scheduleDate}T${scheduleTime}`);
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/post', { // Updated endpoint
+      const response = await fetch(`${API_URL}/api/post`, {
         method: 'POST',
-        // Content-Type header is NOT set manually when using FormData; browser sets it with boundary
         credentials: 'include',
         body: formData,
       });
@@ -68,7 +78,6 @@ function App() {
       alert('An error occurred while submitting the post.');
     }
 
-    // Clear form
     setPostContent('');
     setImageUrl('');
     setSelectedFile(null);
@@ -99,6 +108,22 @@ function App() {
                         rows="5"
                         required
                     ></textarea>
+                    </div>
+
+                    <div className="form-group">
+                    <label>Platforms</label>
+                    <div className="platform-checkboxes">
+                      {PLATFORM_OPTIONS.map(platform => (
+                        <label key={platform} className="platform-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={selectedPlatforms.includes(platform)}
+                            onChange={() => handlePlatformChange(platform)}
+                          />
+                          {' '}{platform.charAt(0).toUpperCase() + platform.slice(1)}
+                        </label>
+                      ))}
+                    </div>
                     </div>
 
                     <div className="form-group">
@@ -157,11 +182,12 @@ function App() {
                 </form>
                 } />
                 <Route path="/analytics" element={<Analytics />} />
+                <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
                 <Route path="/connect-social" element={<SocialConnect />} />
                 <Route path="/post-monitoring" element={<PostMonitoring />} />
             </Route>
-            <Route path="/register" element={<Register />} /> {/* New Route */}
-            <Route path="/login" element={<Login />} />       {/* New Route */}
+            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login />} />
           </Routes>
         </main>
       </div>

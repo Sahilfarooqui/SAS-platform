@@ -8,19 +8,38 @@ services:
     environment:
       - DATABASE_URL=file:./dev.db
       - BASE_URL=http://localhost:5000
-      # Add other env vars here
+      - FRONTEND_URL=http://localhost:3000
+      - SESSION_SECRET=${SESSION_SECRET:-change_this_secret_in_production}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-change_this_key_in_production}
+      - AYRSHARE_API_KEY=${AYRSHARE_API_KEY:-}
+      - FACEBOOK_APP_ID=${FACEBOOK_APP_ID:-}
+      - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET:-}
+      - TWITTER_CONSUMER_KEY=${TWITTER_CONSUMER_KEY:-}
+      - TWITTER_CONSUMER_SECRET=${TWITTER_CONSUMER_SECRET:-}
+      - INSTAGRAM_CLIENT_ID=${INSTAGRAM_CLIENT_ID:-}
+      - INSTAGRAM_CLIENT_SECRET=${INSTAGRAM_CLIENT_SECRET:-}
     volumes:
       - ./backend-nodejs/uploads:/app/uploads
-      - ./backend-nodejs/prisma:/app/prisma # Persist DB if using SQLite file
+      - ./backend-nodejs/prisma:/app/prisma
     networks:
       - sas-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - REACT_APP_API_URL=http://localhost:5000
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - sas-network
 
