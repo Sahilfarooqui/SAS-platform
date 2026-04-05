@@ -25,20 +25,26 @@ fi
 
 echo ""
 echo "🔨 Building Docker images..."
-docker-compose build
+docker compose build
 
 echo ""
 echo "🗄️  Starting services..."
-docker-compose up -d
+docker compose up -d
 
 echo ""
-echo "⏳ Waiting for services to be healthy..."
-sleep 5
+echo "⏳ Waiting for backend to be healthy..."
+for i in $(seq 1 30); do
+  if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
+    echo "✅ Backend is healthy!"
+    break
+  fi
+  sleep 2
+done
 
 echo ""
 echo "✅ Deployment complete!"
 echo "   Frontend: http://localhost:3000"
 echo "   Backend:  http://localhost:5000"
 echo ""
-echo "📋 To view logs: docker-compose logs -f"
-echo "🛑 To stop:      docker-compose down"
+echo "📋 To view logs: docker compose logs -f"
+echo "🛑 To stop:      docker compose down"
