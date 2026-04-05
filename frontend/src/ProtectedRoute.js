@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
+import API_URL from './config';
 
 const ProtectedRoute = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -7,9 +8,7 @@ const ProtectedRoute = () => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // We'll use the connected-accounts endpoint as a check for session validity
-        // A dedicated /api/me or /api/check-auth would be better
-        const response = await fetch('http://localhost:5000/api/connected-accounts', { credentials: 'include' });
+        const response = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
         if (response.ok) {
           setIsAuthenticated(true);
         } else {
@@ -23,7 +22,7 @@ const ProtectedRoute = () => {
   }, []);
 
   if (isAuthenticated === null) {
-    return <div>Loading...</div>; // Or a spinner
+    return <div>Loading...</div>;
   }
 
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;

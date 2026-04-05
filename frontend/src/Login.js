@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import API_URL from './config';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -9,7 +10,7 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/login', {
+      const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -21,9 +22,7 @@ function Login() {
       const data = await response.json();
 
       if (response.ok) {
-        alert(data.message);
-        // Here you would typically store the user's token/session
-        navigate('/'); // Redirect to home page after successful login
+        navigate('/');
       } else {
         alert(data.message || 'Login failed.');
       }

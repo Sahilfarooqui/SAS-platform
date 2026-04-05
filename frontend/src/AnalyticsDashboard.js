@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { io } from "socket.io-client";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import API_URL from './config';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -16,7 +17,7 @@ function AnalyticsDashboard() {
   useEffect(() => {
     const fetchPerformanceData = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/analytics/status', { withCredentials: true });
+        const response = await axios.get(`${API_URL}/api/analytics/status`, { withCredentials: true });
         // Mapping new API format to old state structure if needed, or just use response.data directly
         // For now, let's assume we might need to adjust how we display data
         setPostSummary({
@@ -35,14 +36,14 @@ function AnalyticsDashboard() {
 
     const fetchAnalyticsData = async () => {
       try {
-        const deliverySummaryRes = await axios.get('http://localhost:5000/api/analytics/delivery', { withCredentials: true });
+        const deliverySummaryRes = await axios.get(`${API_URL}/api/analytics/delivery`, { withCredentials: true });
         setDeliverySummary({
             deliveredPosts: deliverySummaryRes.data.delivered,
             failedDeliveries: deliverySummaryRes.data.failed,
             pendingDeliveries: 0 // Not tracked separately
         });
 
-        const engagementSummaryRes = await axios.get('http://localhost:5000/api/analytics/engagement', { withCredentials: true });
+        const engagementSummaryRes = await axios.get(`${API_URL}/api/analytics/engagement`, { withCredentials: true });
         setEngagementSummary({
             highEngagement: 0, // Simplified API returns raw counts
             mediumEngagement: 0,
@@ -58,7 +59,7 @@ function AnalyticsDashboard() {
     fetchPerformanceData();
     fetchAnalyticsData();
 
-    const socket = io("http://localhost:5000", {
+    const socket = io(API_URL, {
         withCredentials: true
     });
 

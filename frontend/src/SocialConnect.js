@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import API_URL from './config';
 
 function SocialConnect() {
   const [connectedAccounts, setConnectedAccounts] = useState([]);
@@ -6,7 +7,7 @@ function SocialConnect() {
   useEffect(() => {
     const fetchConnectedAccounts = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/connected-accounts', {
+        const response = await fetch(`${API_URL}/api/connected-accounts`, {
             credentials: 'include'
         });
         if (response.ok) {
@@ -25,7 +26,7 @@ function SocialConnect() {
 
   const handleDisconnect = async (platform) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/disconnect-${platform}`, {
+      const response = await fetch(`${API_URL}/api/disconnect-${platform}`, {
         method: 'POST',
         credentials: 'include'
       });
@@ -48,7 +49,7 @@ function SocialConnect() {
         {/* Facebook Connect/Disconnect */}
         <div className="social-platform">
           <button
-            onClick={() => connectedAccounts.facebook ? handleDisconnect('facebook') : window.location.href = 'http://localhost:5000/auth/facebook'}
+            onClick={() => connectedAccounts.facebook ? handleDisconnect('facebook') : window.location.href = `${API_URL}/auth/facebook`}
             className={connectedAccounts.facebook ? 'disconnect-btn' : 'connect-btn'}
           >
             {connectedAccounts.facebook ? 'Disconnect Facebook' : 'Connect Facebook'}
@@ -59,7 +60,7 @@ function SocialConnect() {
         {/* Twitter Connect/Disconnect */}
         <div className="social-platform">
           <button
-            onClick={() => connectedAccounts.twitter ? handleDisconnect('twitter') : window.location.href = 'http://localhost:5000/auth/twitter'}
+            onClick={() => connectedAccounts.twitter ? handleDisconnect('twitter') : window.location.href = `${API_URL}/auth/twitter`}
             className={connectedAccounts.twitter ? 'disconnect-btn' : 'connect-btn'}
           >
             {connectedAccounts.twitter ? 'Disconnect Twitter' : 'Connect Twitter'}
@@ -70,7 +71,7 @@ function SocialConnect() {
         {/* Instagram Connect/Disconnect */}
         <div className="social-platform">
           <button
-            onClick={() => connectedAccounts.instagram ? handleDisconnect('instagram') : window.location.href = 'http://localhost:5000/auth/instagram'}
+            onClick={() => connectedAccounts.instagram ? handleDisconnect('instagram') : window.location.href = `${API_URL}/auth/instagram`}
             className={connectedAccounts.instagram ? 'disconnect-btn' : 'connect-btn'}
           >
             {connectedAccounts.instagram ? 'Disconnect Instagram' : 'Connect Instagram'}

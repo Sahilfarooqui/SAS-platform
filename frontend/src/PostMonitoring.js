@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import API_URL from './config';
 
 function PostMonitoring() {
   const [postStatus, setPostStatus] = useState(null);
@@ -10,9 +11,9 @@ function PostMonitoring() {
   useEffect(() => {
     const fetchPostMetrics = async () => {
       try {
-        const statusResponse = await fetch('http://localhost:5000/api/analytics/status', { credentials: 'include' });
-        const deliveryResponse = await fetch('http://localhost:5000/api/analytics/delivery', { credentials: 'include' });
-        const engagementResponse = await fetch('http://localhost:5000/api/analytics/engagement', { credentials: 'include' });
+        const statusResponse = await fetch(`${API_URL}/api/analytics/status`, { credentials: 'include' });
+        const deliveryResponse = await fetch(`${API_URL}/api/analytics/delivery`, { credentials: 'include' });
+        const engagementResponse = await fetch(`${API_URL}/api/analytics/engagement`, { credentials: 'include' });
 
         if (!statusResponse.ok || !deliveryResponse.ok || !engagementResponse.ok) {
           throw new Error('Failed to fetch post metrics');

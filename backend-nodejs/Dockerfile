@@ -8,8 +8,6 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-# We need to ensure we install all dependencies including devDependencies for Prisma if needed,
-# or separate build stages. For simplicity, we install everything.
 RUN npm install
 
 # Copy Prisma schema and generate client
@@ -25,5 +23,5 @@ RUN mkdir -p uploads
 # Expose port
 EXPOSE 5000
 
-# Start the application
-CMD ["node", "index.js"]
+# Run migrations then start the application
+CMD ["sh", "-c", "npx prisma migrate deploy && node index.js"]

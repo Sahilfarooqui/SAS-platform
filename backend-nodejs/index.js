@@ -39,11 +39,11 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + file.originalname);
   }
 });
-const upload = multer({ storage: storage });
+const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB limit
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -56,24 +56,46 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const prisma = new PrismaClient();
-const port = 5000;
+const port = process.env.PORT || 5000;
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // Secret key for encryption
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('ENCRYPTION_KEY environment variable must be set in production');
+  }
+  console.warn('WARNING: ENCRYPTION_KEY not set. Using insecure default for development only.');
+}
+const EFFECTIVE_ENCRYPTION_KEY = ENCRYPTION_KEY || 'dev_encryption_key_change_in_prod';
+
+// Rate limiters for auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+// Rate limiter for OAuth initiation routes
+const oauthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many requests, please try again later.' }
+});
 
 // Encryption and Decryption Utility Functions
 const encrypt = (text) => {
   if (!text) return null;
-  return CryptoJS.AES.encrypt(text, ENCRYPTION_KEY).toString();
+  return CryptoJS.AES.encrypt(text, EFFECTIVE_ENCRYPTION_KEY).toString();
 };
 
 const decrypt = (ciphertext) => {
   if (!ciphertext) return null;
-  const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_KEY);
+  const bytes = CryptoJS.AES.decrypt(ciphertext, EFFECTIVE_ENCRYPTION_KEY);
   return bytes.toString(CryptoJS.enc.Utf8);
 };
 
@@ -114,176 +136,197 @@ passport.use(new LocalStrategy({
   }
 }));
 
-// Facebook OAuth Strategy
-passport.use(new FacebookStrategy({
-  clientID: process.env.FACEBOOK_APP_ID,
-  clientSecret: process.env.FACEBOOK_APP_SECRET,
-  callbackURL: `${BASE_URL}/auth/facebook/callback`,
-  profileFields: ['id', 'displayName', 'emails']
-},
-async (accessToken, refreshToken, profile, done) => {
-  try {
-    let user = await prisma.user.findUnique({ where: { email: profile.emails[0].value } });
+// Facebook OAuth Strategy (only register if credentials are configured)
+if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+  passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_APP_ID,
+    clientSecret: process.env.FACEBOOK_APP_SECRET,
+    callbackURL: `${BASE_URL}/auth/facebook/callback`,
+    profileFields: ['id', 'displayName', 'emails']
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      let user = await prisma.user.findUnique({ where: { email: profile.emails[0].value } });
 
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email: profile.emails[0].value,
-          name: profile.displayName,
-          password: "", // Password is not used for OAuth users
-          facebookAccessToken: encrypt(accessToken), // Encrypt token
-          facebookRefreshToken: encrypt(refreshToken), // Encrypt token
-        },
-      });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: profile.emails[0].value,
+            name: profile.displayName,
+            password: "",
+            facebookAccessToken: encrypt(accessToken),
+            facebookRefreshToken: encrypt(refreshToken),
+          },
+        });
 
-      // Create Ayrshare profile if it doesn't exist
-      if (!user.ayrshareProfileKey) {
-        const ayrshareProfile = await social.createProfile({ userId: user.id });
+        if (!user.ayrshareProfileKey && AYRSHARE_API_KEY) {
+          try {
+            const ayrshareProfile = await social.createProfile({ userId: user.id });
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+            });
+          } catch (e) { console.error('Ayrshare profile creation failed:', e.message); }
+        }
+
+      } else {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+          data: {
+            facebookAccessToken: encrypt(accessToken),
+            facebookRefreshToken: encrypt(refreshToken),
+          },
         });
-      }
 
-    } else {
-      // Update existing user with new tokens
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          facebookAccessToken: encrypt(accessToken), // Encrypt token
-          facebookRefreshToken: encrypt(refreshToken), // Encrypt token
-        },
-      });
-
-      // Create Ayrshare profile if it doesn't exist
-      if (!user.ayrshareProfileKey) {
-        const ayrshareProfile = await social.createProfile({ userId: user.id });
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { ayrshareProfileKey: ayrshareProfile.profileKey },
-        });
+        if (!user.ayrshareProfileKey && AYRSHARE_API_KEY) {
+          try {
+            const ayrshareProfile = await social.createProfile({ userId: user.id });
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+            });
+          } catch (e) { console.error('Ayrshare profile creation failed:', e.message); }
+        }
       }
+      done(null, user);
+    } catch (error) {
+      done(error, null);
     }
-    done(null, user);
-  } catch (error) {
-    done(error, null);
-  }
-}));
+  }));
+} else {
+  console.warn('Facebook OAuth not configured (FACEBOOK_APP_ID/FACEBOOK_APP_SECRET missing)');
+}
 
-// Twitter OAuth Strategy
-passport.use(new TwitterStrategy({
-  consumerKey: process.env.TWITTER_CONSUMER_KEY,
-  consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
-  callbackURL: `${BASE_URL}/auth/twitter/callback`,
-  includeEmail: true
-},
-async (token, tokenSecret, profile, done) => {
-  try {
-    let user = await prisma.user.findUnique({ where: { email: profile.emails[0].value } });
+// Twitter OAuth Strategy (only register if credentials are configured)
+if (process.env.TWITTER_CONSUMER_KEY && process.env.TWITTER_CONSUMER_SECRET) {
+  passport.use(new TwitterStrategy({
+    consumerKey: process.env.TWITTER_CONSUMER_KEY,
+    consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
+    callbackURL: `${BASE_URL}/auth/twitter/callback`,
+    includeEmail: true
+  },
+  async (token, tokenSecret, profile, done) => {
+    try {
+      let user = await prisma.user.findUnique({ where: { email: profile.emails[0].value } });
 
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email: profile.emails[0].value,
-          name: profile.displayName,
-          password: "", // Password is not used for OAuth users
-          twitterAccessToken: encrypt(token), // Encrypt token
-          twitterRefreshToken: encrypt(tokenSecret), // Encrypt token
-        },
-      });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: profile.emails[0].value,
+            name: profile.displayName,
+            password: "",
+            twitterAccessToken: encrypt(token),
+            twitterRefreshToken: encrypt(tokenSecret),
+          },
+        });
 
-      // Create Ayrshare profile if it doesn't exist
-      if (!user.ayrshareProfileKey) {
-        const ayrshareProfile = await social.createProfile({ userId: user.id });
+        if (!user.ayrshareProfileKey && AYRSHARE_API_KEY) {
+          try {
+            const ayrshareProfile = await social.createProfile({ userId: user.id });
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+            });
+          } catch (e) { console.error('Ayrshare profile creation failed:', e.message); }
+        }
+
+      } else {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+          data: {
+            twitterAccessToken: encrypt(token),
+            twitterRefreshToken: encrypt(tokenSecret),
+          },
         });
-      }
 
-    } else {
-      // Update existing user with new tokens
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          twitterAccessToken: encrypt(token), // Encrypt token
-          twitterRefreshToken: encrypt(tokenSecret), // Encrypt token
-        },
-      });
-
-      // Create Ayrshare profile if it doesn't exist
-      if (!user.ayrshareProfileKey) {
-        const ayrshareProfile = await social.createProfile({ userId: user.id });
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { ayrshareProfileKey: ayrshareProfile.profileKey },
-        });
+        if (!user.ayrshareProfileKey && AYRSHARE_API_KEY) {
+          try {
+            const ayrshareProfile = await social.createProfile({ userId: user.id });
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+            });
+          } catch (e) { console.error('Ayrshare profile creation failed:', e.message); }
+        }
       }
+      done(null, user);
+    } catch (error) {
+      done(error, null);
     }
-    done(null, user);
-  } catch (error) {
-    done(error, null);
-  }
-}));
+  }));
+} else {
+  console.warn('Twitter OAuth not configured (TWITTER_CONSUMER_KEY/TWITTER_CONSUMER_SECRET missing)');
+}
 
-// Instagram OAuth Strategy
-passport.use(new InstagramStrategy({
-  clientID: process.env.INSTAGRAM_CLIENT_ID,
-  clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
-  callbackURL: `${BASE_URL}/auth/instagram/callback`
-},
-async (accessToken, refreshToken, profile, done) => {
-  try {
-    let user = await prisma.user.findUnique({ where: { id: profile.id } }); // Instagram doesn't provide email directly
+// Instagram OAuth Strategy (only register if credentials are configured)
+if (process.env.INSTAGRAM_CLIENT_ID && process.env.INSTAGRAM_CLIENT_SECRET) {
+  passport.use(new InstagramStrategy({
+    clientID: process.env.INSTAGRAM_CLIENT_ID,
+    clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
+    callbackURL: `${BASE_URL}/auth/instagram/callback`
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      let user = await prisma.user.findUnique({ where: { id: profile.id } });
 
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          id: profile.id, // Using Instagram ID as user ID
-          email: `${profile.id}@instagram.com`, // Placeholder email
-          name: profile.displayName,
-          password: "", // Password is not used for OAuth users
-          instagramAccessToken: encrypt(accessToken), // Encrypt token
-          instagramRefreshToken: encrypt(refreshToken), // Encrypt token
-        },
-      });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            id: profile.id,
+            email: `${profile.id}@instagram.com`,
+            name: profile.displayName,
+            password: "",
+            instagramAccessToken: encrypt(accessToken),
+            instagramRefreshToken: encrypt(refreshToken),
+          },
+        });
 
-      // Create Ayrshare profile if it doesn't exist
-      if (!user.ayrshareProfileKey) {
-        const ayrshareProfile = await social.createProfile({ userId: user.id });
+        if (!user.ayrshareProfileKey && AYRSHARE_API_KEY) {
+          try {
+            const ayrshareProfile = await social.createProfile({ userId: user.id });
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+            });
+          } catch (e) { console.error('Ayrshare profile creation failed:', e.message); }
+        }
+
+      } else {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+          data: {
+            instagramAccessToken: encrypt(accessToken),
+            instagramRefreshToken: encrypt(refreshToken),
+          },
         });
-      }
 
-    } else {
-      // Update existing user with new tokens
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          instagramAccessToken: encrypt(accessToken), // Encrypt token
-          instagramRefreshToken: encrypt(refreshToken), // Encrypt token
-        },
-      });
-
-      // Create Ayrshare profile if it doesn't exist
-      if (!user.ayrshareProfileKey) {
-        const ayrshareProfile = await social.createProfile({ userId: user.id });
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { ayrshareProfileKey: ayrshareProfile.profileKey },
-        });
+        if (!user.ayrshareProfileKey && AYRSHARE_API_KEY) {
+          try {
+            const ayrshareProfile = await social.createProfile({ userId: user.id });
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { ayrshareProfileKey: ayrshareProfile.profileKey },
+            });
+          } catch (e) { console.error('Ayrshare profile creation failed:', e.message); }
+        }
       }
+      done(null, user);
+    } catch (error) {
+      done(error, null);
     }
-    done(null, user);
-  } catch (error) {
-    done(error, null);
-  }
-}));
+  }));
+} else {
+  console.warn('Instagram OAuth not configured (INSTAGRAM_CLIENT_ID/INSTAGRAM_CLIENT_SECRET missing)');
+}
 
 app.use(session({
-  secret: 'your_secret_key', // Replace with a strong secret key
+  secret: process.env.SESSION_SECRET || (() => {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SESSION_SECRET environment variable must be set in production');
+    }
+    console.warn('WARNING: SESSION_SECRET not set. Using insecure default for development only.');
+    return 'dev_secret_change_in_production';
+  })(),
   resave: false,
   saveUninitialized: false
 }));
@@ -510,7 +553,7 @@ const validate = (validations) => {
 };
 
 // Register Route
-app.post('/register', validate([
+app.post('/register', authLimiter, validate([
   body('email').isEmail().withMessage('Invalid email address'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
   body('name').notEmpty().withMessage('Name is required')
@@ -549,7 +592,7 @@ app.post('/register', validate([
 });
 
 // Login Route
-app.post('/login', validate([
+app.post('/login', authLimiter, validate([
   body('email').isEmail().withMessage('Invalid email address'),
   body('password').notEmpty().withMessage('Password is required')
 ]), (req, res, next) => {
@@ -562,39 +605,74 @@ app.post('/login', validate([
           console.error("Login error:", err);
           return next(err); 
       }
-      return res.json({ message: 'Logged in successfully', user });
+      const { id, email, name } = user;
+      return res.json({ message: 'Logged in successfully', user: { id, email, name } });
     });
   })(req, res, next);
 });
 
+// Logout Route
+app.post('/logout', (req, res, next) => {
+  req.logout((err) => {
+    if (err) { return next(err); }
+    req.session.destroy(() => {
+      res.clearCookie('connect.sid');
+      res.json({ message: 'Logged out successfully' });
+    });
+  });
+});
+
+// Current user / auth check endpoint
+app.get('/api/me', authLimiter, isAuthenticated, (req, res) => {
+  const { id, email, name } = req.user;
+  res.json({ id, email, name });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // Facebook authentication routes
-app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'publish_to_groups', 'pages_manage_posts'] }));
+app.get('/auth/facebook', oauthLimiter, (req, res, next) => {
+  if (!process.env.FACEBOOK_APP_ID) {
+    return res.status(503).json({ error: 'Facebook OAuth not configured' });
+  }
+  passport.authenticate('facebook', { scope: ['email', 'publish_to_groups', 'pages_manage_posts'] })(req, res, next);
+});
 
 app.get('/auth/facebook/callback',
-  passport.authenticate('facebook', { failureRedirect: '/' }),
+  passport.authenticate('facebook', { failureRedirect: `${FRONTEND_URL}/connect-social` }),
   (req, res) => {
-    // Successful authentication, redirect home.
-    res.redirect('/');
+    res.redirect(`${FRONTEND_URL}/connect-social`);
   });
 
 // Twitter authentication routes
-app.get('/auth/twitter', passport.authenticate('twitter'));
+app.get('/auth/twitter', oauthLimiter, (req, res, next) => {
+  if (!process.env.TWITTER_CONSUMER_KEY) {
+    return res.status(503).json({ error: 'Twitter OAuth not configured' });
+  }
+  passport.authenticate('twitter')(req, res, next);
+});
 
 app.get('/auth/twitter/callback',
-  passport.authenticate('twitter', { failureRedirect: '/' }),
+  passport.authenticate('twitter', { failureRedirect: `${FRONTEND_URL}/connect-social` }),
   (req, res) => {
-    // Successful authentication, redirect home.
-    res.redirect('/');
+    res.redirect(`${FRONTEND_URL}/connect-social`);
   });
 
 // Instagram authentication routes
-app.get('/auth/instagram', passport.authenticate('instagram'));
+app.get('/auth/instagram', oauthLimiter, (req, res, next) => {
+  if (!process.env.INSTAGRAM_CLIENT_ID) {
+    return res.status(503).json({ error: 'Instagram OAuth not configured' });
+  }
+  passport.authenticate('instagram')(req, res, next);
+});
 
 app.get('/auth/instagram/callback',
-  passport.authenticate('instagram', { failureRedirect: '/' }),
+  passport.authenticate('instagram', { failureRedirect: `${FRONTEND_URL}/connect-social` }),
   (req, res) => {
-    // Successful authentication, redirect home.
-    res.redirect('/');
+    res.redirect(`${FRONTEND_URL}/connect-social`);
   });
 
 app.get('/api/posts', isAuthenticated, async (req, res) => {
