@@ -64,7 +64,14 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const prisma = new PrismaClient();
 const port = process.env.PORT || 5000;
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'dev_encryption_key_change_in_prod';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('ENCRYPTION_KEY environment variable must be set in production');
+  }
+  console.warn('WARNING: ENCRYPTION_KEY not set. Using insecure default for development only.');
+}
+const EFFECTIVE_ENCRYPTION_KEY = ENCRYPTION_KEY || 'dev_encryption_key_change_in_prod';
 
 // Rate limiters for auth routes
 const authLimiter = rateLimit({
@@ -73,15 +80,22 @@ const authLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' }
 });
 
+// Rate limiter for OAuth initiation routes
+const oauthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
 // Encryption and Decryption Utility Functions
 const encrypt = (text) => {
   if (!text) return null;
-  return CryptoJS.AES.encrypt(text, ENCRYPTION_KEY).toString();
+  return CryptoJS.AES.encrypt(text, EFFECTIVE_ENCRYPTION_KEY).toString();
 };
 
 const decrypt = (ciphertext) => {
   if (!ciphertext) return null;
-  const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_KEY);
+  const bytes = CryptoJS.AES.decrypt(ciphertext, EFFECTIVE_ENCRYPTION_KEY);
   return bytes.toString(CryptoJS.enc.Utf8);
 };
 
@@ -306,7 +320,13 @@ if (process.env.INSTAGRAM_CLIENT_ID && process.env.INSTAGRAM_CLIENT_SECRET) {
 }
 
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev_secret_change_in_production',
+  secret: process.env.SESSION_SECRET || (() => {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SESSION_SECRET environment variable must be set in production');
+    }
+    console.warn('WARNING: SESSION_SECRET not set. Using insecure default for development only.');
+    return 'dev_secret_change_in_production';
+  })(),
   resave: false,
   saveUninitialized: false
 }));
@@ -603,7 +623,7 @@ app.post('/logout', (req, res, next) => {
 });
 
 // Current user / auth check endpoint
-app.get('/api/me', isAuthenticated, (req, res) => {
+app.get('/api/me', authLimiter, isAuthenticated, (req, res) => {
   const { id, email, name } = req.user;
   res.json({ id, email, name });
 });
@@ -614,7 +634,7 @@ app.get('/health', (req, res) => {
 });
 
 // Facebook authentication routes
-app.get('/auth/facebook', (req, res, next) => {
+app.get('/auth/facebook', oauthLimiter, (req, res, next) => {
   if (!process.env.FACEBOOK_APP_ID) {
     return res.status(503).json({ error: 'Facebook OAuth not configured' });
   }
@@ -628,7 +648,7 @@ app.get('/auth/facebook/callback',
   });
 
 // Twitter authentication routes
-app.get('/auth/twitter', (req, res, next) => {
+app.get('/auth/twitter', oauthLimiter, (req, res, next) => {
   if (!process.env.TWITTER_CONSUMER_KEY) {
     return res.status(503).json({ error: 'Twitter OAuth not configured' });
   }
@@ -642,7 +662,7 @@ app.get('/auth/twitter/callback',
   });
 
 // Instagram authentication routes
-app.get('/auth/instagram', (req, res, next) => {
+app.get('/auth/instagram', oauthLimiter, (req, res, next) => {
   if (!process.env.INSTAGRAM_CLIENT_ID) {
     return res.status(503).json({ error: 'Instagram OAuth not configured' });
   }
